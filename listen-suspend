@@ -5,12 +5,14 @@
 # KDE Plasma (Wayland) in OpenSUSE Tumbleweed
 
 PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin"
-TMP="/tmp/yoga-sleep-wake"
-SLEEP_STATE_FILE="$TMP/sleeping"
+
 KBD_BRIGHTNESS_FILE="/sys/class/leds/platform::kbd_backlight/brightness"
-WIFI_STATE_FILE="$TMP/wifi_state"
-BT_STATE_FILE="$TMP/bluetooth_state"
-KBD_STATE_FILE="$TMP/kbd_backlight_state"
+SLEEPING=0
+WIFI_ENABLED=
+BT_ENABLED=
+KB_BACKLIGHT=
+
+set -euo pipefail
 
 if [ "$EUID" -eq 0 ]; then
 	echo "You shouldn't run this as root." >&2
@@ -26,9 +28,6 @@ if [ ! -f "$KBD_BRIGHTNESS_FILE" ] ; then
 	exit 1
 fi
 
-rm -r /tmp/yoga-sleep-wake
-mkdir -p "$TMP" || exit 1
-
 _is_radio_blocked() {
 	if rfkill list "$1" | grep -q "Soft blocked: no"; then
 		echo "enabled"
@@ -37,9 +36,11 @@ _is_radio_blocked() {
 	fi
 }
 
-KBD_BRIGHTNESS=
+_KBD_BRIGHTNESS=
 _set_backlight() {
-	declare -g KBD_BRIGHTNESS="$1"
+	# brightnessctl is needed to change the backlight w/o root
+	declare -g _KBD_BRIGHTNESS
+	_KBD_BRIGHTNESS="$1"
 	brightnessctl s "$1" -d "platform::kbd_backlight" >/dev/null
 }
 
@@ -47,86 +48,129 @@ _get_backlight() {
 	# Sometimes works, sometimes doesn't.
 	# Guaranteed to just output `0` after the first read, so cache it instead
 	# Now let's hope it doesn't output `0` on the first read...
-	if [ "$KBD_BRIGHTNESS" == "" ]; then
+	if [ "$_KBD_BRIGHTNESS" == "" ]; then
 		out=$(brightnessctl g -d platform::kbd_backlight)
-		declare -g KBD_BRIGHTNESS="$out"
+		declare -g _KBD_BRIGHTNESS
+		_KBD_BRIGHTNESS="$out"
 	fi
-	echo "$KBD_BRIGHTNESS"
+	echo "$_KBD_BRIGHTNESS"
+}
+
+get_pname() {
+	if [ "$1" = "" ] || [ "$1" -lt 1 ] || [ "$1" -gt 4194304 ]
+	then return
+	fi
+	ps -p "$1" -o comm=
+}
+
+collect_ancestors() {
+	pid=$BASHPID
+	while [ "$pid" -ne 1 ]; do
+		echo "$pid"
+		pid=$(ps -o ppid= -p "$pid" | tr -d ' ')
+	done
+}
+
+get_descendants() {
+    local parent=$1
+    for child in $(ps -o pid= --ppid "$parent"); do
+        echo "$child"
+        get_descendants "$child"
+    done
+}
+
+send_sig() {
+	# Rule 1: Do not stop ancestors
+	# Rule 2: Do not stop non-user processes
+	# Rule 3: Do not stop children processes of $BASHPID
+
+	# Collect all processes at the beginning.
+	# This is so we don't accidentally stop new children we create.
+	USER_PROCS=$(ps -u "$USER" -o pid=)
+	declare -ag KEEP_PID
+
+	#echo "${KEEP[@]}"
+	#for pid in "${KEEP[@]}"; do
+	#	echo "[$pid] $(get_pname "$pid")"
+	#done
+	echo "$USER_PROCS" | while read -r pid; do
+		#pname=$(get_pname "$pid")
+		if [[ ! " ${KEEP_PID[*]} " =~ [[:space:]]${pid}[[:space:]] ]]; then
+			echo "$pid"
+			#sync
+			kill -"$1" "$pid"
+		fi
+	done
+	echo ====
 }
 
 _suspend() {
 	# Check if already in custom sleep state
-	if [ -f "$SLEEP_STATE_FILE" ]; then
-		exit 0
+	if [ "$SLEEPING" = "1" ]; then
+		return 0
 	fi
 
-	# Create sleep state file
-	date > "$SLEEP_STATE_FILE"
+	declare -g SLEEPING
+	declare -g KB_BACKLIGHT
+	declare -g WIFI_ENABLED
+	declare -g BT_ENABLED
 
-	_get_backlight > "$KBD_STATE_FILE"
-
-	# Save current states before turning them off
-	_is_radio_blocked wifi > "$WIFI_STATE_FILE"
-	_is_radio_blocked bluetooth > "$BT_STATE_FILE"
+	SLEEPING=1
+	KB_BACKLIGHT=$(_get_backlight)
+	WIFI_ENABLED=$(_is_radio_blocked wifi)
+	BT_ENABLED=$(_is_radio_blocked bluetooth)
 
 	rfkill block wifi
 	rfkill block bluetooth
 	_set_backlight 0
-
 	kscreen-doctor --dpms off
-	loginctl lock-session
+	#loginctl lock-session
 
-	SELF_PID=$$
+	sleep 2
+	# Rule 1: Do not stop ancestors
+	# Rule 2: Do not stop non-user processes
+	# Rule 3: Do not stop children processes of $BASHPID
 
-	EXCLUDE="systemd|dbus-daemon"
+	# Collect all processes at the beginning.
+	# This is so we don't accidentally stop new children we create.
+	USER_PROCS=$(ps -u "$USER" -o pid=)
 
-	#sleep 2
+	declare -ag KEEP_PID
+	KEEP_PID=()
+	for child in $(collect_ancestors) 1 $(get_descendants $BASHPID); do
+		KEEP_PID+=("$child")
+	done
 
-	#pgrep -u "$USER" -x | while read -r pid; do
-	#	pname=$(ps -p "$pid" -o comm=)
-	#	if [[ "$pid" -ne "$SELF_PID" ]] && ! [[ $pname =~ ^($EXCLUDE)$ ]]; then
-			#kill -STOP "$pid"
-			#echo $pid, $pname
-#		fi
-#	done
+	send_sig STOP
 }
 
 unblock_if_blocked_prev() {
-	if [ -f "$1" ]; then
-		if [ "$(cat "$1")" == "enabled" ]; then
-			rfkill unblock "$2"
-		fi
-		rm "$1"
+	if [ "$1" == "enabled" ]; then
+		rfkill unblock "$2"
 	fi
 }
 
 _wake() {
-	if [ ! -f "$SLEEP_STATE_FILE" ]; then
-		exit 0
+	if [ "$SLEEPING" = "0" ]; then
+		return 0
 	fi
 
-	rm "$SLEEP_STATE_FILE"
+	# Wake everything up first
+	send_sig CONT
+	declare -ag KEEP_PID
+	KEEP_PID=()
+
+	sleep 1
 
 	kscreen-doctor --dpms on
 
-	unblock_if_blocked_prev "$WIFI_STATE_FILE" "wifi"
-	unblock_if_blocked_prev "$BT_STATE_FILE" "bluetooth"
+	unblock_if_blocked_prev "$WIFI_ENABLED" "wifi"
+	unblock_if_blocked_prev "$BT_ENABLED" "bluetooth"
 
 	# Restore keyboard backlight
-	if [ -f "$KBD_STATE_FILE" ]; then
-		_set_backlight "$(cat "$KBD_STATE_FILE")"
-		rm "$KBD_STATE_FILE"
+	if [ ! "$KB_BACKLIGHT" = "" ]; then
+		_set_backlight "$KB_BACKLIGHT"
 	fi
-
-	#SELF_PID=$$
-	#EXCLUDE="zsh|systemd|niri|acpid|swaylock|swayidle|dbus-daemon|nvim|yazi|kitty"
-
-	#pgrep -u "$USER" -x | while read -r pid; do
-	#	pname=$(ps -p "$pid" -o comm=)
-	#	if [[ "$pid" -ne "$SELF_PID" ]] && ! [[ $pname =~ ^($EXCLUDE)$ ]]; then
-	#		kill -CONT "$pid"
-	#	fi
-	#done
 }
 
 
