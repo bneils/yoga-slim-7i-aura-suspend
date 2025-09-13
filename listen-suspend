@@ -89,19 +89,13 @@ send_sig() {
 	USER_PROCS=$(ps -u "$USER" -o pid=)
 	declare -ag KEEP_PID
 
-	#echo "${KEEP[@]}"
-	#for pid in "${KEEP[@]}"; do
-	#	echo "[$pid] $(get_pname "$pid")"
-	#done
 	echo "$USER_PROCS" | while read -r pid; do
 		#pname=$(get_pname "$pid")
 		if [[ ! " ${KEEP_PID[*]} " =~ [[:space:]]${pid}[[:space:]] ]]; then
 			echo "$pid"
-			#sync
 			kill -"$1" "$pid"
 		fi
 	done
-	echo ====
 }
 
 _suspend() {
@@ -124,7 +118,7 @@ _suspend() {
 	rfkill block bluetooth
 	_set_backlight 0
 	kscreen-doctor --dpms off
-	#loginctl lock-session
+	loginctl lock-session
 
 	sleep 2
 	# Rule 1: Do not stop ancestors
@@ -141,7 +135,7 @@ _suspend() {
 		KEEP_PID+=("$child")
 	done
 
-	send_sig STOP
+	#send_sig STOP
 }
 
 unblock_if_blocked_prev() {
@@ -156,7 +150,7 @@ _wake() {
 	fi
 
 	# Wake everything up first
-	send_sig CONT
+	#send_sig CONT
 	declare -ag KEEP_PID
 	KEEP_PID=()
 
