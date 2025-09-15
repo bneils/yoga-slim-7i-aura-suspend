@@ -12,6 +12,10 @@ WIFI_ENABLED=
 BT_ENABLED=
 KB_BACKLIGHT=
 
+# the amount of time to wait in idle before entering hibernation
+# set this to zero (0) to disable this entirely.
+HIBERNATE_TIMER_MINS=30
+
 set -euo pipefail
 
 if [ "$EUID" -eq 0 ]; then
@@ -108,6 +112,8 @@ _suspend() {
 	declare -g KB_BACKLIGHT
 	declare -g WIFI_ENABLED
 	declare -g BT_ENABLED
+	declare -g start_standby_secs
+	start_standby_secs="$SECONDS"
 
 	SLEEPING=1
 	KB_BACKLIGHT=$(_get_backlight)
@@ -167,6 +173,37 @@ _wake() {
 	fi
 }
 
+# can_hibernate() : returns whether the computer has been in standby for long enough to hibernate
+# params: none
+# returns: an exit status of 0 if it can hibernate or 1 if it shouldn't hibernate
+can_hibernate() {
+	if [ "$SLEEPING" -ne 1 ] || [ "$HIBERNATE_TIMER_MINS" -eq 0 ] ; then
+		return 1
+	fi
+	
+	elapsed_mins=$(("($SECONDS - $start_standby_secs) / 60"))
+	[ "$elapsed_mins" -ge "$HIBERNATE_TIMER_MINS" ]
+	status=$?
+	return $status
+}
+
+# wait_hibernate() : put the computer to hibernation if can_hibernate() says so, checking every minute. Only call once.
+# params: none
+# returns: none
+wait_hibernate() {
+	while true
+	do
+		if can_hibernate
+		then
+			echo Hibernate!
+			#systemctl hibernate
+		fi
+		#Safety sleep
+		sleep 60
+	done
+}
+
+wait_hibernate &
 
 # Begin listening for sleep events
 while read -r line
