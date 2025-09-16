@@ -6,9 +6,10 @@ Entering suspend on most Lunar Lake devices results in the keyboard backlight an
 # Supported Devices
 * Lenovo Yoga Slim 7i Aura (15ILL9)
 * OS: OpenSUSE Tumbleweed (kernel 6.16.3-1-default) and KDE Plasma (6.4.4)
+* Swap: 16 GB / 32 GB depending on your RAM size
 
 # Warnings
-Running this script without understanding how it works can result in your system being soft bricked, requiring a restart. Please test this script first. This script is a **work in progress** and does not provide a warranty.
+Running this script without understanding how it works can result in your system being soft bricked, requiring a restart. Please test this script first. This script is a **work in progress** and does not provide a warranty. Make sure you have enough swap for hibernation or that you disable the feature.
 
 # How it works
 When `dbus` detects that your lid has closed it will turn the screen off using `kscreen-doctor`, lock your session, disable all radios using `rfkill`, and switch off the keyboard backlight. When `dbus` receives an "open lid" event it will restore the previous state of your radios and switch your screen back on. Whether it is able to restore the keyboard backlight is finnicky and may not work every time due to firmware.
