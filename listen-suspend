@@ -123,7 +123,8 @@ is_discharging() {
 update_standby_drain_start() {
 	declare -g STANDBY_DRAIN_START
 
-	if [ "${1+x}" = "start" ]; then
+	if [ "${1:-}" = "start" ]; then
+		echo_if_debug "update_standby_drain_start: if start"
 		# This branch is the same as the second one EXCEPT it overwrites
 		# the amount of time elapsed. If we ran this branch all the time, the variable would be useless.
 		if is_discharging
@@ -131,6 +132,7 @@ update_standby_drain_start() {
 		else STANDBY_DRAIN_START=-1
 		fi
 	else
+		echo_if_debug "update_standby_drain_start: else"
 		# This second piece of code is run during the hibernation sleep loop.
 		# It is meant to update the drain status AFTER sleep has been entered.
 		# However, it won't overwrite a positive value if already discharging, therefore keeping score.
