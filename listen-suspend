@@ -6,17 +6,24 @@
 
 PATH="/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin"
 
+BATTERY_STATUS_PATH="/sys/class/power_supply/BAT0/status"
 KBD_BRIGHTNESS_FILE="/sys/class/leds/platform::kbd_backlight/brightness"
 SLEEPING=0
 WIFI_ENABLED=
 BT_ENABLED=
 KB_BACKLIGHT=
+STANDBY_DRAIN_START=-1
 
 # the amount of time to wait in idle before entering hibernation
 # set this to zero (0) to disable this entirely.
 HIBERNATE_TIMER_MINS=30
 
-set -euo pipefail
+# Since this script doesn't modify the filesystem (afaik), the -e option is omitted.
+# This is because there are some quite crucial commands such as "kill" that return harmless error codes,
+# that would otherwise cause this script to exit and maroon itself in a SIGSTOP state that I don't want.
+#
+# It's also used in a lot of my functions to avoid the use of subshells, which don't affect the parent environment
+set -uo pipefail
 
 if [ "$EUID" -eq 0 ]; then
 	echo "You shouldn't run this as root." >&2
@@ -31,6 +38,11 @@ if [ ! -f "$KBD_BRIGHTNESS_FILE" ] ; then
 	echo Could not find the keyboard brightness file.
 	exit 1
 fi
+
+echo_if_debug() {
+	[ "${DEBUG:-0}" -eq 1 ] && echo "$1"
+	return 0
+}
 
 _is_radio_blocked() {
 	if rfkill list "$1" | grep -q "Soft blocked: no"; then
@@ -49,6 +61,7 @@ _set_backlight() {
 }
 
 _get_backlight() {
+	declare -g "_KBD_BRIGHTNESS"
 	# Sometimes works, sometimes doesn't.
 	# Guaranteed to just output `0` after the first read, so cache it instead
 	# Now let's hope it doesn't output `0` on the first read...
@@ -90,10 +103,10 @@ send_sig() {
 
 	# Collect all processes at the beginning.
 	# This is so we don't accidentally stop new children we create.
-	USER_PROCS=$(ps -u "$USER" -o pid=)
+	user_procs=$(ps -u "$USER" -o pid=)
 	declare -ag KEEP_PID
 
-	echo "$USER_PROCS" | while read -r pid; do
+	echo "$user_procs" | while read -r pid; do
 		#pname=$(get_pname "$pid")
 		if [[ ! " ${KEEP_PID[*]} " =~ [[:space:]]${pid}[[:space:]] ]]; then
 			echo "$pid"
@@ -102,18 +115,48 @@ send_sig() {
 	done
 }
 
+is_discharging() {
+	status=$(cat "$BATTERY_STATUS_PATH")
+	[ "$status" = "Discharging" ]
+}
+
+update_standby_drain_start() {
+	declare -g STANDBY_DRAIN_START
+
+	if [ "${1+x}" = "start" ]; then
+		# This branch is the same as the second one EXCEPT it overwrites
+		# the amount of time elapsed. If we ran this branch all the time, the variable would be useless.
+		if is_discharging
+		then STANDBY_DRAIN_START="$SECONDS"
+		else STANDBY_DRAIN_START=-1
+		fi
+	else
+		# This second piece of code is run during the hibernation sleep loop.
+		# It is meant to update the drain status AFTER sleep has been entered.
+		# However, it won't overwrite a positive value if already discharging, therefore keeping score.
+		if ! is_discharging
+		then STANDBY_DRAIN_START=-1
+		elif [ "$STANDBY_DRAIN_START" -eq -1 ]
+		then STANDBY_DRAIN_START="$SECONDS"
+		fi
+	fi
+}
+
 _suspend() {
 	# Check if already in custom sleep state
-	if [ "$SLEEPING" = "1" ]; then
+	if [ "$SLEEPING" -eq 1 ]; then
 		return 0
 	fi
+
+	echo_if_debug "Entered sleep"
 
 	declare -g SLEEPING
 	declare -g KB_BACKLIGHT
 	declare -g WIFI_ENABLED
 	declare -g BT_ENABLED
-	declare -g start_standby_secs
-	start_standby_secs="$SECONDS"
+	declare -g STANDBY_DRAIN_START
+
+	update_standby_drain_start start
 
 	SLEEPING=1
 	KB_BACKLIGHT=$(_get_backlight)
@@ -131,10 +174,6 @@ _suspend() {
 	# Rule 2: Do not stop non-user processes
 	# Rule 3: Do not stop children processes of $BASHPID
 
-	# Collect all processes at the beginning.
-	# This is so we don't accidentally stop new children we create.
-	USER_PROCS=$(ps -u "$USER" -o pid=)
-
 	declare -ag KEEP_PID
 	KEEP_PID=()
 	for child in $(collect_ancestors) 1 $(get_descendants $BASHPID); do
@@ -151,13 +190,22 @@ unblock_if_blocked_prev() {
 }
 
 _wake() {
-	if [ "$SLEEPING" = "0" ]; then
+	declare -g SLEEPING
+	declare -g WIFI_ENABLED
+	declare -g BT_ENABLED
+	declare -g KB_BACKLIGHT
+	declare -ag KEEP_PID
+
+	if [ "$SLEEPING" -eq 0 ]; then
 		return 0
 	fi
 
+	SLEEPING=0
+
+	echo_if_debug "Entered wake"
+
 	# Wake everything up first
 	#send_sig CONT
-	declare -ag KEEP_PID
 	KEEP_PID=()
 
 	sleep 1
@@ -177,40 +225,62 @@ _wake() {
 # params: none
 # returns: an exit status of 0 if it can hibernate or 1 if it shouldn't hibernate
 can_hibernate() {
-	if [ "$SLEEPING" -ne 1 ] || [ "$HIBERNATE_TIMER_MINS" -eq 0 ] ; then
+	declare -g SLEEPING
+	declare -g HIBERNATE_TIMER_MINS
+	declare -g STANDBY_DRAIN_START
+	if [ "$SLEEPING" -ne 1 ] || [ "$HIBERNATE_TIMER_MINS" -eq 0 ] || [ "$STANDBY_DRAIN_START" -eq -1 ] ; then
 		return 1
 	fi
 	
-	elapsed_mins=$(("($SECONDS - $start_standby_secs) / 60"))
+	elapsed_mins=$(("($SECONDS - $STANDBY_DRAIN_START) / 60"))
 	[ "$elapsed_mins" -ge "$HIBERNATE_TIMER_MINS" ]
 	status=$?
 	return $status
 }
 
-# wait_hibernate() : put the computer to hibernation if can_hibernate() says so, checking every minute. Only call once.
+# wait_hibernate() : put the computer to hibernation if can_hibernate() says so, and updates drain variable.
 # params: none
 # returns: none
 wait_hibernate() {
-	while true
-	do
-		if can_hibernate
-		then
-			echo Hibernate!
-			#systemctl hibernate
-		fi
-		#Safety sleep
-		sleep 60
+	declare -g STANDBY_DRAIN_START
+	declare -g SLEEPING
+
+	echo_if_debug "wait_hibernate: time=$SECONDS, DRAIN_START=$STANDBY_DRAIN_START"
+
+	if [ "$SLEEPING" -eq 1 ] ; then
+		update_standby_drain_start
+	fi
+
+	if can_hibernate
+	then
+		echo_if_debug "Entering hibernation."
+		systemctl hibernate
+		_wake
+		echo_if_debug "Left hibernation at time=$SECONDS."
+	fi
+}
+
+timer() {
+	while true; do
+		echo "TICK"
+		sleep 10
 	done
 }
 
-wait_hibernate &
+listen_for_events() {
+	dbus-monitor --system "type='signal',path=/org/freedesktop/UPower" 2>&1 | grep --line-buffered -A1 LidIsClosed
+}
 
-# Begin listening for sleep events
-while read -r line
+# Begin listening for lid events
+{
+	listen_for_events &
+	timer &
+	wait
+} | while read -r line
 do
     case "$line" in
         *"boolean true"*) _suspend;;
         *"boolean false"*) _wake;;
+        *"TICK"*) wait_hibernate;;
     esac
-done < <(dbus-monitor --system "type='signal',path=/org/freedesktop/UPower" 2>&1 | grep --line-buffered -A1 LidIsClosed)
-
+done
