@@ -1,0 +1,10 @@
+[Unit]
+Description=Save energy by shutting the screen and radio off
+After=dbus.socket
+Requires=dbus.socket
+
+[Service]
+ExecStart=/usr/local/bin/listen-suspend
+
+[Install]
+WantedBy=graphical-session.target

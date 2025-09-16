@@ -1,11 +1,19 @@
-This is a script meant to mitigate suspend issues for the Lenovo Yoga Slim 7i Aura. This is work based on the script provided by [Daniel-42-z](https://github.com/Daniel-42-z/lenovo-yoga-sleep-wake-scripts), but has been heavily modified since then. Suspend and lock behavior should be disabled in Plasma's settings.
+This is a script meant to enhance standby power efficiency when suspend is not in-use for the Lenovo Yoga Slim 7i Aura. This is work based on the script provided by [Daniel-42-z](https://github.com/Daniel-42-z/lenovo-yoga-sleep-wake-scripts), but has been heavily modified since then. Suspend, hibernate, and lock behavior should be disabled in Plasma's settings.
+
+# Motivation
+Entering suspend on most Lunar Lake devices results in the keyboard backlight and fans becoming unresponsive, requiring a restart. 
 
 # Supported Devices
 * Lenovo Yoga Slim 7i Aura (15ILL9)
 * OS: OpenSUSE Tumbleweed (kernel 6.16.3-1-default) and KDE Plasma (6.4.4)
 
 # Warnings
-Running this script without inspecting the entire script in full, and understanding it, can result in your system being soft bricked, requiring a restart. This script is a **work in progress**, and is not currently fully functional. It may also not work all the time. There is no warranty provided.
+Running this script without understanding how it works can result in your system being soft bricked, requiring a restart. Please test this script first. This script is a **work in progress** and does not provide a warranty.
 
-# Benefits
-Without SIGSTOP being sent to processes, I've already seen a 1W battery discharge with this script in-use.
+# How it works
+When `dbus` detects that your lid has closed it will turn the screen off using `kscreen-doctor`, lock your session, disable all radios using `rfkill`, and switch off the keyboard backlight. When `dbus` receives an "open lid" event it will restore the previous state of your radios and switch your screen back on. Whether it is able to restore the keyboard backlight is finnicky and may not work every time due to firmware.
+
+The script is configured to wait a custom amount of time *off the plug* before hibernating in this state. That time starts when you unplug from AC and resets when you plug back in. I haven't thoroughly tested this but it should work. This feature was added to limit the use of hibernation to long-term breaks.
+
+# Results
+With the CPU at idle and everything off, I measured about 1 watt being discharged from the battery. With hibernation set to kick in after 30 minutes, this is about 0.5 watt-hours lost or 0.7% of your battery charge.
