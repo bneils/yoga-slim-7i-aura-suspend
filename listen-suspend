@@ -17,6 +17,8 @@ STANDBY_DRAIN_START=-1
 # the amount of time to wait in idle before entering hibernation
 # set this to zero (0) to disable this entirely.
 HIBERNATE_TIMER_MINS=30
+# set SWAP_WHEN_HIBERNATE to 1, to enable/disable swap before/after hibernation
+SWAP_WHEN_HIBERNATE=0
 
 # Since this script doesn't modify the filesystem (afaik), the -e option is omitted.
 # This is because there are some quite crucial commands that return harmless error codes,
@@ -57,6 +59,14 @@ _set_backlight() {
 	declare -g _KBD_BRIGHTNESS
 	_KBD_BRIGHTNESS="$1"
 	brightnessctl s "$1" -d "platform::kbd_backlight" >/dev/null
+}
+
+save_backlight() {
+	brightnessctl -s -d "platform::kbd_backlight" >/dev/null
+}
+
+restore_backlight() {
+	brightnessctl -r -d "platform::kbd_backlight" >/dev/null
 }
 
 _get_backlight() {
@@ -118,9 +128,12 @@ _suspend() {
 	update_standby_drain_start start
 
 	SLEEPING=1
-	KB_BACKLIGHT=$(_get_backlight)
+	#KB_BACKLIGHT=$(_get_backlight)
+	save_backlight
 	WIFI_ENABLED=$(_is_radio_blocked wifi)
 	BT_ENABLED=$(_is_radio_blocked bluetooth)
+
+	echo_if_debug "Read kb backlight: $KB_BACKLIGHT"
 
 	rfkill block wifi
 	rfkill block bluetooth
@@ -154,10 +167,14 @@ _wake() {
 	unblock_if_blocked_prev "$WIFI_ENABLED" "wifi"
 	unblock_if_blocked_prev "$BT_ENABLED" "bluetooth"
 
+	restore_backlight
 	# Restore keyboard backlight
-	if [ ! "$KB_BACKLIGHT" = "" ]; then
-		_set_backlight "$KB_BACKLIGHT"
-	fi
+	#if [ ! "$KB_BACKLIGHT" = "" ]; then
+	#	_set_backlight "$KB_BACKLIGHT"
+
+	#	echo_if_debug "Read backlight as $(_get_backlight)"
+	#	brightnessctl s "$1" -d "platform::kbd_backlight" >/dev/null
+	#fi
 }
 
 # can_hibernate() : returns whether the computer has been in standby for long enough to hibernate
@@ -193,7 +210,9 @@ wait_hibernate() {
 	if can_hibernate
 	then
 		echo_if_debug "Entering hibernation."
+		[ "$SWAP_WHEN_HIBERNATE" -eq 1 ] && swapon -a
 		systemctl hibernate
+		[ "$SWAP_WHEN_HIBERNATE" -eq 1 ] && swapoff -a
 		_wake
 		echo_if_debug "Left hibernation at time=$SECONDS."
 	fi

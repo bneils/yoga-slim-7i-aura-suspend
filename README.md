@@ -8,6 +8,9 @@ Entering suspend on most Lunar Lake devices results in the keyboard backlight an
 * OS: OpenSUSE Tumbleweed (kernel 6.16.3-1-default) and KDE Plasma (6.4.4)
 * Swap: 16 GB / 32 GB depending on your RAM size
 
+# Hibernation with temporary swap
+If you have a swap partition, but don't enable it, you must enable the setuid bit for `swapon` and `swapoff` using `sudo chmod u+s /sbin/swapon /sbin/swapoff`. Verify this with `ls -l /sbin/swapon /sbin/swapoff` by looking for `rws`. **Warning**: This action has risks, since now any user can modify your swap! This shouldn't matter though for single-user systems (such as laptops). Make sure to verify that this script's use of `swapon` and `swapoff` is OK for your system, and modify if needed.
+
 # Warnings
 Running this script without understanding how it works can result in your system being soft bricked, requiring a restart. Please test this script first. This script is a **work in progress** and does not provide a warranty. Make sure you have enough swap for hibernation or that you disable the feature.
 
