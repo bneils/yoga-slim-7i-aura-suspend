@@ -210,11 +210,15 @@ wait_hibernate() {
 	if can_hibernate
 	then
 		echo_if_debug "Entering hibernation."
-		[ "$SWAP_WHEN_HIBERNATE" -eq 1 ] && swapon -a
+		if [ "$SWAP_WHEN_HIBERNATE" -eq 1 ] ; then
+			swapon -a
+		fi
 		systemctl hibernate
-		[ "$SWAP_WHEN_HIBERNATE" -eq 1 ] && swapoff -a
-		_wake
 		echo_if_debug "Left hibernation at time=$SECONDS."
+		_wake
+		if [ "$SWAP_WHEN_HIBERNATE" -eq 1 ] ; then
+			swapoff -a
+		fi
 	fi
 }
 
