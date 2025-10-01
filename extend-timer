@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+
+# project-specific file that  signals to
+# the listener script to extend its
+# hibernation timer by 1 minute.
+#
+# this file is deleted or "consumed" when
+# it is read by the listener, so it must be
+# created every minute by cron
+#
+# the trailing number is just a random identifier
+touch /dev/shm/extend-timer-4865
+
+# this script is best called by cron.
+# here is an example cron script:
+
+#ET=/usr/local/bin/extend-timer
+#0-50 10-11 * * 1 $ET
+#0-50 15 * * 1    $ET
+
+# meaning: on monday, from 10-10:50, 11-11:50,
+# and 3-3:50, run extend-timer every minute.
