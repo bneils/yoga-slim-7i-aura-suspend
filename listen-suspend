@@ -207,6 +207,21 @@ can_hibernate() {
 	return $status
 }
 
+block_on_sysclock() {
+	# https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html
+	# SECONDS - "The number of seconds at shell invocation and the current time
+	# are always determined by querying the system clock at one-second resolution"
+	block_time="$1"
+	start="$SECONDS"
+	while true; do
+		diff="$(($SECONDS-$start))"
+		if [ "$diff" -ge "$block_time" ]; then
+			break
+		fi
+		sleep 0.5
+	done
+}
+
 # wait_hibernate() : put the computer to hibernation if can_hibernate() says so, and updates drain variable.
 # params: none
 # returns: none
@@ -232,7 +247,19 @@ wait_hibernate() {
 			echo_if_debug "Enabling swap."
 			swapon -a
 		fi
+		# systemctl(1): "It will not wait for the hibernate/thaw cycle to complete."
+		# Unfortunately, the --wait option does not work with hibernate.
 		systemctl hibernate
+		status=$?
+		if [ "$status" -ne 0 ]; then
+			echo_if_debug "Hibernation failed. Check your swap file."
+		fi
+
+		# Expectation is that there are at least X seconds from the point that a computer
+		# queues hibernation to when it resumes from hibernation, but that hibernate takes less time
+		# to shutdown. This relies on the system clock rather than the monotonic clock used in sleep.
+		block_on_sysclock 15
+
 		echo_if_debug "Left hibernation at time=$SECONDS."
 		_wake
 		if [ "$SWAP_WHEN_HIBERNATE" -eq 1 ] ; then
