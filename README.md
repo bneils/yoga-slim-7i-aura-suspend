@@ -1,7 +1,7 @@
 Enhance powered-on idle behavior when suspend is disabled for the Lenovo Yoga Slim 7i Aura.
 Provides options to enter hibernation when the lid is closed.
 This is work based on the script provided by [Daniel-42-z](https://github.com/Daniel-42-z/lenovo-yoga-sleep-wake-scripts), but has been heavily modified since then.
-Currently, this script is not much better than 
+Power efficiency gains are not much better than just leaving your computer on, but can still limit lost energy.
 
 # Setup instructions
 * Disable suspend, hibernate, and lock behavior in Plasma's settings.
@@ -43,7 +43,7 @@ This feature was added to limit the use of hibernation to long-term breaks.
 # Results
 With the CPU at idle and everything off, I measured about 1 watt being discharged from the battery.
 With hibernation set to kick in after 30 minutes, this is about 0.5 watt-hours lost or 0.7% of your battery charge.
-Since nothing in userspace is actually paused, this isn't much better than just letting your laptop screen turn off.
+Since nothing in userspace is actually paused, this isn't much better than just letting your laptop screen turn off automatically, but at least limits the CPU utilization of networked programs.
 
 # Warnings
 Running this script without understanding how it works can result in your system being soft bricked, requiring a restart.
