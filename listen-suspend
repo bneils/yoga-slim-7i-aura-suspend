@@ -1,4 +1,4 @@
-#!/usr/bin/bash
+#!/usr/bin/env bash
 
 # Only tested for:
 # Lenovo Yoga Slim 7i Aura Edition
@@ -13,6 +13,7 @@ WIFI_ENABLED=
 BT_ENABLED=
 KB_BACKLIGHT=
 STANDBY_DRAIN_START=-1
+EXTEND_TIMER_FILE="/dev/shm/extend-timer-4865"
 
 # the amount of time to wait in idle before entering hibernation
 # set this to zero (0) to disable this entirely.
@@ -43,6 +44,18 @@ fi
 echo_if_debug() {
 	[ "${DEBUG:-0}" -eq 1 ] && echo "$1"
 	return 0
+}
+
+# check_timer() : output "1" if the timer needs to be extended, output "0" otherwise
+# the function that calls check_timer() must save its output since the internal file
+# it checks is consumed immediately.
+check_timer() {
+	if [ -f "$EXTEND_TIMER_FILE" ]; then
+		rm "$EXTEND_TIMER_FILE"
+		echo 1
+	else
+		echo 0
+	fi
 }
 
 _is_radio_blocked() {
@@ -194,6 +207,21 @@ can_hibernate() {
 	return $status
 }
 
+block_on_sysclock() {
+	# https://www.gnu.org/software/bash/manual/html_node/Bash-Variables.html
+	# SECONDS - "The number of seconds at shell invocation and the current time
+	# are always determined by querying the system clock at one-second resolution"
+	block_time="$1"
+	start="$SECONDS"
+	while true; do
+		diff="$(($SECONDS-$start))"
+		if [ "$diff" -ge "$block_time" ]; then
+			break
+		fi
+		sleep 0.5
+	done
+}
+
 # wait_hibernate() : put the computer to hibernation if can_hibernate() says so, and updates drain variable.
 # params: none
 # returns: none
@@ -207,17 +235,40 @@ wait_hibernate() {
 		update_standby_drain_start
 	fi
 
+	if [ "$(check_timer)" -eq 1 ] && [ "$STANDBY_DRAIN_START" -ne -1 ]; then
+		echo_if_debug "Extending standby."
+		STANDBY_DRAIN_START=$(("$STANDBY_DRAIN_START+60"))
+	fi
+
 	if can_hibernate
 	then
 		echo_if_debug "Entering hibernation."
 		if [ "$SWAP_WHEN_HIBERNATE" -eq 1 ] ; then
+			echo_if_debug "Enabling swap."
 			swapon -a
 		fi
+		# systemctl(1): "It will not wait for the hibernate/thaw cycle to complete."
+		# Unfortunately, the --wait option does not work with hibernate.
 		systemctl hibernate
+		status=$?
+		if [ "$status" -ne 0 ]; then
+			echo_if_debug "Hibernation failed. Check your swap file."
+		fi
+
+		# Expectation is that there are at least X seconds from the point that a computer
+		# queues hibernation to when it resumes from hibernation, but that hibernate takes less time
+		# to shutdown. This relies on the system clock rather than the monotonic clock used in sleep.
+		block_on_sysclock 15
+
 		echo_if_debug "Left hibernation at time=$SECONDS."
 		_wake
 		if [ "$SWAP_WHEN_HIBERNATE" -eq 1 ] ; then
+			echo_if_debug "Disabling swap."
 			swapoff -a
+			success=$?
+			if [ "$success" -ne 0 ] ; then
+				echo_if_debug "Warning: Swap not disabled."
+			fi
 		fi
 	fi
 }
