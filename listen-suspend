@@ -214,7 +214,7 @@ block_on_sysclock() {
 	block_time="$1"
 	start="$SECONDS"
 	while true; do
-		diff="$(($SECONDS-$start))"
+		diff="$((SECONDS-start))"
 		if [ "$diff" -ge "$block_time" ]; then
 			break
 		fi
@@ -229,9 +229,8 @@ wait_hibernate() {
 	declare -g STANDBY_DRAIN_START
 	declare -g SLEEPING
 
-	echo_if_debug "wait_hibernate: time=$SECONDS, DRAIN_START=$STANDBY_DRAIN_START"
-
 	if [ "$SLEEPING" -eq 1 ] ; then
+		echo_if_debug "wait_hibernate: time=$SECONDS, DRAIN_START=$STANDBY_DRAIN_START"
 		update_standby_drain_start
 	fi
 
@@ -261,15 +260,14 @@ wait_hibernate() {
 		block_on_sysclock 15
 
 		echo_if_debug "Left hibernation at time=$SECONDS."
-		_wake
 		if [ "$SWAP_WHEN_HIBERNATE" -eq 1 ] ; then
 			echo_if_debug "Disabling swap."
-			swapoff -a
-			success=$?
-			if [ "$success" -ne 0 ] ; then
-				echo_if_debug "Warning: Swap not disabled."
-			fi
+			while ! swapoff -a; do
+				echo_if_debug "Swapoff failed. Retrying."
+				sleep 1
+			done
 		fi
+		_wake
 	fi
 }
 

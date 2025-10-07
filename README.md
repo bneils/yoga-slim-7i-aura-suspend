@@ -24,6 +24,7 @@ If you are in the subset of users who want hibernation but don't want your swap 
 Verify this with `ls -l /sbin/swapon /sbin/swapoff` by looking for `rws`.
 **Warning**: This action has risks, since now any user can modify your swap! This shouldn't matter though for single-user systems (such as laptops).
 Make sure to verify that this script's use of `swapon` and `swapoff` is OK for your system, and modify if needed.
+If you are doing this, make sure to [disable swap on startup](https://unix.stackexchange.com/questions/416653/how-to-disable-swap-from-starting-up-on-boot).
 
 # Specify always-on hours with cron
 Use `extend-timer` to delay the script's hibernation timer.
