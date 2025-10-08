@@ -25,6 +25,8 @@ Verify this with `ls -l /sbin/swapon /sbin/swapoff` by looking for `rws`.
 **Warning**: This action has risks, since now any user can modify your swap! This shouldn't matter though for single-user systems (such as laptops).
 Make sure to verify that this script's use of `swapon` and `swapoff` is OK for your system, and modify if needed.
 If you are doing this, make sure to [disable swap on startup](https://unix.stackexchange.com/questions/416653/how-to-disable-swap-from-starting-up-on-boot).
+Additionally, assign the global variable `SWAP_DEV` which can be in the form `"UUID=12abfd6c-9398-462d-81d3-5c4556a6809d"`, `"/dev/sdX"`, or whatever parameters `swapon` and `swapoff` take.
+Verify that `swapon "$SWAP_DEV"` properly enables/disables swap.
 
 # Specify always-on hours with cron
 Use `extend-timer` to delay the script's hibernation timer.
