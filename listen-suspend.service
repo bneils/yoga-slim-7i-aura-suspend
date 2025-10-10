@@ -5,6 +5,6 @@ Requires=dbus.socket
 
 [Service]
 ExecStart=/usr/local/bin/listen-suspend
-
+Environment=
 [Install]
 WantedBy=graphical-session.target

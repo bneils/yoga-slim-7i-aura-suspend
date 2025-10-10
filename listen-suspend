@@ -20,6 +20,8 @@ EXTEND_TIMER_FILE="/dev/shm/extend-timer-4865"
 HIBERNATE_TIMER_MINS=30
 # set SWAP_WHEN_HIBERNATE to 1, to enable/disable swap before/after hibernation
 SWAP_WHEN_HIBERNATE=0
+# If SWAP_WHEN_HIBERNATE=1, then SWAP_DEV is used.
+SWAP_DEV=""
 
 # Since this script doesn't modify the filesystem (afaik), the -e option is omitted.
 # This is because there are some quite crucial commands that return harmless error codes,
@@ -214,7 +216,7 @@ block_on_sysclock() {
 	block_time="$1"
 	start="$SECONDS"
 	while true; do
-		diff="$(($SECONDS-$start))"
+		diff="$((SECONDS-start))"
 		if [ "$diff" -ge "$block_time" ]; then
 			break
 		fi
@@ -229,9 +231,8 @@ wait_hibernate() {
 	declare -g STANDBY_DRAIN_START
 	declare -g SLEEPING
 
-	echo_if_debug "wait_hibernate: time=$SECONDS, DRAIN_START=$STANDBY_DRAIN_START"
-
 	if [ "$SLEEPING" -eq 1 ] ; then
+		echo_if_debug "wait_hibernate: time=$SECONDS, DRAIN_START=$STANDBY_DRAIN_START"
 		update_standby_drain_start
 	fi
 
@@ -245,7 +246,7 @@ wait_hibernate() {
 		echo_if_debug "Entering hibernation."
 		if [ "$SWAP_WHEN_HIBERNATE" -eq 1 ] ; then
 			echo_if_debug "Enabling swap."
-			swapon -a
+			swapon "$SWAP_DEV"
 		fi
 		# systemctl(1): "It will not wait for the hibernate/thaw cycle to complete."
 		# Unfortunately, the --wait option does not work with hibernate.
@@ -261,15 +262,17 @@ wait_hibernate() {
 		block_on_sysclock 15
 
 		echo_if_debug "Left hibernation at time=$SECONDS."
-		_wake
 		if [ "$SWAP_WHEN_HIBERNATE" -eq 1 ] ; then
 			echo_if_debug "Disabling swap."
-			swapoff -a
-			success=$?
-			if [ "$success" -ne 0 ] ; then
-				echo_if_debug "Warning: Swap not disabled."
+			if ! swapoff "$SWAP_DEV"; then
+				echo_if_debug "Swapoff failed. Retrying."
+				sleep 1
+				if ! swapoff "$SWAP_DEV"; then
+					echo_if_debug "Swapoff failed. Abort."
+				fi
 			fi
 		fi
+		_wake
 	fi
 }
 
@@ -283,6 +286,7 @@ timer() {
 listen_for_events() {
 	dbus-monitor --system "type='signal',path=/org/freedesktop/UPower" 2>&1 | grep --line-buffered -A1 LidIsClosed
 }
+
 
 # Begin listening for lid events
 {
