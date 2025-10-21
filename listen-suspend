@@ -19,9 +19,9 @@ EXTEND_TIMER_FILE="/dev/shm/extend-timer-4865"
 # set this to zero (0) to disable this entirely.
 HIBERNATE_TIMER_MINS=30
 # set SWAP_WHEN_HIBERNATE to 1, to enable/disable swap before/after hibernation
-SWAP_WHEN_HIBERNATE=0
+SWAP_WHEN_HIBERNATE=1
 # If SWAP_WHEN_HIBERNATE=1, then SWAP_DEV is used.
-SWAP_DEV=""
+SWAP_DEV="UUID=12abfd6c-9398-462d-81d3-5c4556a6809d"
 
 # Since this script doesn't modify the filesystem (afaik), the -e option is omitted.
 # This is because there are some quite crucial commands that return harmless error codes,

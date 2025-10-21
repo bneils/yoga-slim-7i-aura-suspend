@@ -20,13 +20,24 @@ See the following issues:
 * OS: OpenSUSE Tumbleweed (kernel 6.16) and KDE Plasma (6.4.4)
 
 # Hibernation with temporary swap
-If you are in the subset of users who want hibernation but don't want your swap partition being active, then you must enable the setuid bit for `swapon` and `swapoff` using `sudo chmod u+s /sbin/swapon /sbin/swapoff`.
-Verify this with `ls -l /sbin/swapon /sbin/swapoff` by looking for `rws`.
-**Warning**: This action has risks, since now any user can modify your swap! This shouldn't matter though for single-user systems (such as laptops).
+If you are in the subset of users who want hibernation but don't want your swap partition being active, then you must fiddle with the sudoers file.
+I previously recommended to modify the SUID bit, but this changes between upgrades.
+First, [disable swap on startup](https://unix.stackexchange.com/questions/416653/how-to-disable-swap-from-starting-up-on-boot).
+
+1. Change the value of `SWAP_DEV` in the script to your swap device (e.g. `"UUID=12abfd6c-9398-462d-81d3-5c4556a6809d"`, `"/dev/sdX"`) and test it.
+2. Run `groups` then check if you are `sudo`, `wheel`, or neither.
+3. Run `usermod -aG wheel $USER`
+4. Reboot.
+5. Run `sudo visudo -f /etc/sudoers.d/swapon`.
+Make sure this file doesn't contain periods!
+Additionally, make sure this file gets imported by the main `/etc/sudoers` file.
+6. Add `%wheel ALL=(root) NOPASSWD: /usr/sbin/swapon`.
+7. Add `%wheel ALL=(root) NOPASSWD: /usr/sbin/swapoff`.
+8. You can test whether this worked by opening a new terminal and typing `SWAP_DEV="..." sudo swapon "$SWAP_DEV"` as this is exactly how it will appear in the script.
+
+Translation: all users in group `wheel` on all hosts may run as root the program `swapon` without providing a password.
+
 Make sure to verify that this script's use of `swapon` and `swapoff` is OK for your system, and modify if needed.
-If you are doing this, make sure to [disable swap on startup](https://unix.stackexchange.com/questions/416653/how-to-disable-swap-from-starting-up-on-boot).
-Additionally, assign the global variable `SWAP_DEV` which can be in the form `"UUID=12abfd6c-9398-462d-81d3-5c4556a6809d"`, `"/dev/sdX"`, or whatever parameters `swapon` and `swapoff` take.
-Verify that `swapon "$SWAP_DEV"` properly enables/disables swap.
 
 # Specify always-on hours with cron
 Use `extend-timer` to delay the script's hibernation timer.
