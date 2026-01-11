@@ -1,3 +1,9 @@
+# Deprecated
+
+This script is now deprecated. Please follow the instructions at the [Arch Wiki](https://wiki.archlinux.org/title/Lenovo_Yoga_Slim_7i_Aura_(15ILL9)) for properly fixing fan issues caused by suspend.
+
+# About
+
 Enhance powered-on idle behavior when suspend is disabled for the Lenovo Yoga Slim 7i Aura.
 Provides options to enter hibernation when the lid is closed.
 This is work based on the script provided by [Daniel-42-z](https://github.com/Daniel-42-z/lenovo-yoga-sleep-wake-scripts), but has been heavily modified since then.
