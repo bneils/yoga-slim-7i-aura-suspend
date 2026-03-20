@@ -1,6 +1,6 @@
 # Deprecated
 
-This script is now deprecated. Please follow the instructions at the [Arch Wiki](https://wiki.archlinux.org/title/Lenovo_Yoga_Slim_7i_Aura_(15ILL9)) for properly fixing fan issues caused by suspend. My power savings config is [here](https://github.com/bneils/lenovo-15ill9-config/).
+This script is now deprecated. ~~Please follow the instructions at the [Arch Wiki](https://wiki.archlinux.org/title/Lenovo_Yoga_Slim_7i_Aura_(15ILL9)) for properly fixing fan issues caused by suspend~~ Issue is resolved according to [discussion](https://wiki.archlinux.org/title/Talk:Lenovo_Yoga_Slim_7i_Aura_(15ILL9)). My power savings config is [here](https://github.com/bneils/lenovo-15ill9-config/).
 
 # About
 
